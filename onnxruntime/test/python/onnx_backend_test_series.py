@@ -92,17 +92,6 @@ def create_backend_test(testname=None):
             '^test_batchnorm_example_old_cpu',
             '^test_batchnorm_example_training_mode_cpu',
             '^test_celu_cpu',
-            '^test_clip_cpu',
-            '^test_clip_default_inbounds_cpu',
-            '^test_clip_default_int8_inbounds_cpu',
-            '^test_clip_default_int8_max_cpu',
-            '^test_clip_default_int8_min_cpu',
-            '^test_clip_default_max_cpu',
-            '^test_clip_default_min_cpu',
-            '^test_clip_example_cpu',
-            '^test_clip_inbounds_cpu',
-            '^test_clip_outbounds_cpu',
-            '^test_clip_splitbounds_cpu',
             '^test_dropout_default_cpu',
             '^test_dropout_random_cpu',
             '^test_einsum_batch_diagonal_cpu',
@@ -113,16 +102,9 @@ def create_backend_test(testname=None):
             '^test_gathernd_example_int32_batch_dim1_cpu',
             '^test_inverse_batched_cpu',
             '^test_inverse_cpu',
-            '^test_max_float16_cpu',
-            '^test_max_float32_cpu',
-            '^test_max_float64_cpu',
             '^test_max_int16_cpu',
-            '^test_max_int32_cpu',
-            '^test_max_int64_cpu',
             '^test_max_int8_cpu',
             '^test_max_uint16_cpu',
-            '^test_max_uint32_cpu',
-            '^test_max_uint64_cpu',
             '^test_max_uint8_cpu',
             '^test_mean_square_distance_mean_3d_cpu',
             '^test_mean_square_distance_mean_3d_expanded_cpu',
@@ -136,16 +118,9 @@ def create_backend_test(testname=None):
             '^test_mean_square_distance_none_weights_expanded_cpu',
             '^test_mean_square_distance_sum_cpu',
             '^test_mean_square_distance_sum_expanded_cpu',
-            '^test_min_float16_cpu',
-            '^test_min_float32_cpu',
-            '^test_min_float64_cpu',
             '^test_min_int16_cpu',
-            '^test_min_int32_cpu',
-            '^test_min_int64_cpu',
             '^test_min_int8_cpu',
             '^test_min_uint16_cpu',
-            '^test_min_uint32_cpu',
-            '^test_min_uint64_cpu',
             '^test_min_uint8_cpu',
             '^test_momentum_cpu',
             '^test_momentum_multiple_cpu',
@@ -191,14 +166,14 @@ def create_backend_test(testname=None):
             '^test_unfoldtodepth_without_padding_cpu',
             '^test_gradient_of_add_and_mul_cpu',
             '^test_gradient_of_add_cpu',
-            '^test_negative_log_likelihood_loss_input_shape_is_NCd1d2_with_weight_reduction_sum_ignore_index_expanded_cpu',
             '^test_batchnorm_example_training_mode_cpu',
             '^test_batchnorm_epsilon_training_mode_cpu',
             '^test_maxunpool_export_with_output_shape_cpu', #result mismatch
             '^test_resize_downsample_scales_cubic_align_corners_cpu',  # results mismatch with onnx tests
             '^test_resize_downsample_scales_linear_align_corners_cpu'  # results mismatch with onnx tests
         ]
-
+        if platform.architecture()[0] == '32bit':
+            current_failing_tests += ['^test_vgg19', '^test_zfnet512', '^test_bvlc_alexnet_cpu']
         # Example of how to disable tests for a specific provider.
         # if c2.supports_device('NGRAPH'):
         #    current_failing_tests.append('^test_operator_repeat_dim_overflow_cpu')
