@@ -25,6 +25,21 @@ void QGemmu8s8_s32(
     int ldc,
     concurrency::ThreadPool* thread_pool);
 
+void QGemms8s8_s32(
+    int M,
+    int N,
+    int K,
+    const int8_t* lhs_data,
+    int lda,
+    const int8_t lhs_offset,
+    const int8_t* rhs_data,
+    int ldb,
+    const int8_t rhs_offset,
+    int32_t* result_data,
+    int ldc,
+    concurrency::ThreadPool* thread_pool);
+
+
 void QGemmu8u8_s32(
     int M,
     int N,

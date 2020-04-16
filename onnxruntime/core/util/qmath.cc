@@ -39,6 +39,33 @@ void QGemmu8s8_s32(
 #endif
 }
 
+void QGemms8s8_s32(
+    int M,
+    int N,
+    int K,
+    const int8_t* lhs_data,
+    int lda,
+    const int8_t lhs_offset,
+    const int8_t* rhs_data,
+    int ldb,
+    const int8_t rhs_offset,
+    int32_t* result_data,
+    int ldc,
+    concurrency::ThreadPool* thread_pool) {
+/*
+#ifdef MLAS_SUPPORTS_GEMM_U8X8
+  MlasGemm(M, N, K, lhs_data, lda, lhs_offset, rhs_data, ldb, rhs_offset, result_data, ldc, thread_pool);
+#else
+*/
+  ORT_UNUSED_PARAMETER(thread_pool);
+
+  ORT_ENFORCE(lhs_offset == 0 && rhs_offset == 0, "For Eigen, zero point must be zero");
+  ORT_ENFORCE(lda == K && ldb == N && ldc == N, "For Eigen only RowMajor*RowMajor=RowMajor format is supported");
+
+  EigenCastGEMM<int8_t, int8_t, int32_t>(lhs_data, rhs_data, result_data, M, N, K);
+//#endif
+}
+
 void QGemmu8u8_s32(
     int M,
     int N,
