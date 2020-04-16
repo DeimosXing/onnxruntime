@@ -147,10 +147,10 @@ class ExecutionFrame final : public IExecutionFrame {
 
   const AllocPlanPerValue& GetAllocationPlan(int ort_value_idx);
 
-  std::deque<int>* FindOrtValueGroup(const void* p) {
-    if (grouped_buffers_.count(p) == 0)
+  std::deque<int>* FindQueueForGroupedAsyncBuffers(const void* p) {
+    if (queues_for_grouped_async_buffers_.count(p) == 0)
       return nullptr;
-    return &grouped_buffers_[p];
+    return &queues_for_grouped_async_buffers_[p];
   }
 
   const SessionState& session_state_;
@@ -171,6 +171,6 @@ class ExecutionFrame final : public IExecutionFrame {
   std::map<OrtMemoryInfo, BufferUniquePtr> buffers_;
 
   // deque for grouped async buffers
-  std::unordered_map<const void*, std::deque<int>> grouped_buffers_;
+  std::unordered_map<const void*, std::deque<int>> queues_for_grouped_async_buffers_;
 };
 }  // namespace onnxruntime

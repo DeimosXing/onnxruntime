@@ -69,7 +69,7 @@ std::ostream& operator<<(std::ostream& out, std::pair<const SequentialExecutionP
       auto& loc = elt_plan.location;
       out << ", " << loc.ToString();
 
-      if (elt_plan.grouped_buffers) out << ", async buffer";
+      if (elt_plan.grouped_async_buffers) out << ", async buffer";
 
     } else {
       out << "Index out-of-range!";
@@ -324,7 +324,7 @@ class PlannerImpl {
 
   bool FindMatchingTensorInFreeList(
       const onnxruntime::NodeArg& output_arg,
-      std::function<void(std::list<FreeBufferInfo>::const_iterator)> action_when_found) {
+      std::function<bool(std::list<FreeBufferInfo>::const_iterator)> process_found) {
     auto p_required_buffer_shape = context_.GetShape(output_arg);
     if (nullptr == p_required_buffer_shape) return false;
     auto& required_memory_info = AllocPlan(output_arg.Name()).location;
@@ -338,9 +338,10 @@ class PlannerImpl {
       if (nullptr != p_available_buffer_shape) {
         if (SameSize(*p_available_buffer_shape, *p_node_arg,
                      *p_required_buffer_shape, output_arg)) {
-          action_when_found(it);
-          freelist_.erase(it);
-          return true;
+          if (process_found(it)) {
+            freelist_.erase(it);
+            return true;
+          }
         }
       }
     }
@@ -349,13 +350,18 @@ class PlannerImpl {
 
   // Find if freelist contains a buffer of the same size as output_arg
   bool FindReusableTensor(const onnxruntime::NodeArg& output_arg, OrtValueIndex* reusable_tensor) {
-    // do not reuse fenced buffers since the execution may not have finished when it is in free list
+    // async buffer should not reuse
     if (HasFence(&output_arg)) return false;
 
     return FindMatchingTensorInFreeList(
         output_arg,
         [&](std::list<FreeBufferInfo>::const_iterator it) {
-          *reusable_tensor = it->ml_value;
+          if (AllocPlan(it->ml_value).grouped_async_buffers == nullptr) {
+            // only reuse non-async buffer from free list
+            *reusable_tensor = it->ml_value;
+            return true;
+          }
+          return false;
         });
   }
 
@@ -596,24 +602,40 @@ class PlannerImpl {
           AllocPlan(current).alloc_kind = AllocKind::kAllocate;
         } else if (FindReusableInput(*pnode, output_arg_num, &reused)) {
           // Reuse one of this node's input buffers as the output buffer (for in-place update)
+          ORT_ENFORCE(!HasFence(&*node_output));
           Reuse(reused, current, AllocKind::kReuse);
+          // note that reuse of async buffer input is OK,
+          // because this op would wait for input fence to be ready
+          // after that, the buffer should be no longer async
+          // so remove it from async group to prevent it being
+          // reused by other aysn buffers later
+          if (AllocPlan(reused).grouped_async_buffers != nullptr) {
+            AllocPlan(reused).grouped_async_buffers->erase(reused);
+            AllocPlan(reused).grouped_async_buffers = nullptr;
+            AllocPlan(reused).alloc_kind = AllocKind::kAllocate;
+          }
         } else if (!context_.IsParallelExecutionEnabled() && FindReusableTensor(*node_output, &reused)) {
           // Reuse an available (dead) buffer for this output, this is only for sequential execution.
           Reuse(reused, current, AllocKind::kReuse);
-        } else if (AllocPlan(current).create_fence) {
-          auto& grouped_buffers = AllocPlan(current).grouped_buffers;
+        } else if (!context_.IsParallelExecutionEnabled() && AllocPlan(current).create_fence) {
+          // Reuse an async buffer by setting up its group, this is only for sequential execution.
+          // actual reuse of async buffer happens at runtime in ExecutionFrame
+          auto& grouped_buffers = AllocPlan(current).grouped_async_buffers;
           if (!FindMatchingTensorInFreeList(
                   *node_output,
                   [&](std::list<FreeBufferInfo>::const_iterator it) {
-                    int value_idx = it->ml_value;
-                    ORT_ENFORCE(grouped_buffers == nullptr);  // should have not been assigned yet
-                    grouped_buffers = AllocPlan(value_idx).grouped_buffers;
+                    auto& found_grouped_buffers = AllocPlan(it->ml_value).grouped_async_buffers;
+                    if (found_grouped_buffers != nullptr) {
+                      ORT_ENFORCE(grouped_buffers == nullptr);  // should have not been assigned yet
+                      grouped_buffers = found_grouped_buffers;
+                      return true;
+                    }
+                    return false;
                   })) {
             // not found in free list, this is the first in its group
             grouped_buffers = std::make_shared<std::unordered_set<int>>();
           }
           // add self into group
-          ORT_ENFORCE(grouped_buffers != nullptr);  // should have been assigned
           grouped_buffers->insert(current);
           AllocPlan(current).alloc_kind = AllocKind::kGroupAllocate;
         } else {
@@ -659,8 +681,7 @@ class PlannerImpl {
     bool has_fence = false;
     if (arg && arg->Exists()) {
       OrtValueIndex index = Index(arg->Name());
-      AllocPlanPerValue& value_plan = AllocPlan(index);
-      has_fence = value_plan.create_fence;
+      has_fence = AllocPlan(index).create_fence;
     }
 
     return has_fence;

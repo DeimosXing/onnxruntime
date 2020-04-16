@@ -219,10 +219,10 @@ ExecutionFrame::ExecutionFrame(const std::vector<int>& feed_mlvalue_idxs, const 
 
     // setup group queues
     for (const auto& alloc_plan : session_state.GetExecutionPlan()->allocation_plan) {
-      const void* p = alloc_plan.grouped_buffers.get();
-      ORT_ENFORCE(p != nullptr);
-      if (grouped_buffers_.count(p) == 0) {
-        grouped_buffers_.emplace(p, std::deque<int>());
+      const void* p = alloc_plan.grouped_async_buffers.get();
+      if (p != nullptr &&
+          queues_for_grouped_async_buffers_.count(p) == 0) {
+        queues_for_grouped_async_buffers_.emplace(p, std::deque<int>());
       }
     }
   }
@@ -450,20 +450,18 @@ Status ExecutionFrame::AllocateAsPerAllocationPlan(OrtValue& ort_value, int ort_
         break;
       }
       case AllocKind::kGroupAllocate: {
-        ORT_ENFORCE(per_alloc_plan.create_fence);
         // Async buffers with fence would be added to tail of its group queue
-        auto* ort_value_group = FindOrtValueGroup(per_alloc_plan.grouped_buffers.get());
-        ORT_ENFORCE(ort_value_group != nullptr);
-        int reuse_mlvalue_index = ort_value_group->front();
+        auto* queue = FindQueueForGroupedAsyncBuffers(per_alloc_plan.grouped_async_buffers.get());
+        int reuse_mlvalue_index = queue->front();
         OrtValue& reuse_value = GetMutableMLValue(reuse_mlvalue_index);
         if (reuse_value.Fence()->CanRelease()) {
           // if async exec on the head of the group queue has finished, reuse
-          ort_value_group->pop_front();
+          queue->pop_front();
           ORT_RETURN_IF_ERROR(AllocateMLValueTensorPreAllocateBuffer(
               ort_value, reuse_mlvalue_index, ml_data_type, alloc_info, *shape));
           ort_value.ShareFenceWith(reuse_value);
         } else {
-          // nothing to reuse from the group, create a new one with a new fence
+          // nothing to reuse from the queue, create a new buffer with a new fence
           ORT_RETURN_IF_ERROR(AllocateMLValueTensorSelfOwnBuffer(ort_value, ort_value_index, ml_data_type, alloc_info,
                                                                  *shape, /*create_fence*/ true));
         }
@@ -500,14 +498,14 @@ Status ExecutionFrame::CreateNodeOutputMLValueImpl(OrtValue& ort_value, int ort_
 Status ExecutionFrame::ReleaseMLValueImpl(int ort_value_idx) {
   Fence_t fence = GetMLValue(ort_value_idx).Fence();
   if (fence) {
-    // Async buffers with fence would be added to tail of its group queue
+    // Async buffers with fence would be added to tail of grouped_async_buffer's queue
     const auto& alloc_plan = session_state_.GetExecutionPlan()->allocation_plan;
     ORT_ENFORCE(ort_value_idx >= 0 && static_cast<size_t>(ort_value_idx) < alloc_plan.size());
     const auto& per_alloc_plan = alloc_plan[ort_value_idx];
-    auto* ort_value_group = FindOrtValueGroup(per_alloc_plan.grouped_buffers.get());
-    // note it is possible for AllocKind::kAllocateOutput to have fence but not in a group
-    if (ort_value_group != nullptr) {
-      ort_value_group->push_back(ort_value_idx);
+    auto* queue = FindQueueForGroupedAsyncBuffers(per_alloc_plan.grouped_async_buffers.get());
+    // note it is possible for value to have fence but not in a group
+    if (queue != nullptr) {
+      queue->push_back(ort_value_idx);
     }
     // keep the value in all_values_ until Session.run() end
   } else {
