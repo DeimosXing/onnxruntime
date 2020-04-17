@@ -299,7 +299,8 @@ TEST(QuantizeLinearMatmulOpTest, QLinearMatMulInt8WithRoundedShift) {
                                           -21, 1, 12, -18, 7, 11, 0, 1, 9, -23, -4, -7, -1, -11, 6, -7, 4, -25, \
                                           8, -1, 19, -18, 13, 7, 5, -12, -13, 3, -13, 6, 13, 0, -20, -8, 9, 15, \
                                           14, -6, -3, 17, 19, -8, 14, 10});
-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kCpuExecutionProvider}); // Since we round, results won't match CPU
+  test.Run();
+  //test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kCpuExecutionProvider}); // Since we round, results won't match CPU
 }
 
 }  // namespace test
